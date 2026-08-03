@@ -1,0 +1,277 @@
+// D.W.P. Core — Database schema
+// Run `npm run db:push` (quick, no migration history) during early development,
+// or `npm run db:migrate` once you want versioned migrations.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  AGENT
+  ADMIN
+  CALL_CENTER
+}
+
+enum DeviceCondition {
+  NEW
+  USED
+}
+
+enum WarrantyStatus {
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+  CANCELLED
+}
+
+enum ClaimStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REPAIR_IN_PROGRESS
+  READY_FOR_PICKUP
+  COMPLETED
+}
+
+enum ClaimRisk {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum PaymentStatus {
+  PAID
+  PENDING
+  FAILED
+}
+
+enum PaymentMethod {
+  FULL
+  EMI
+}
+
+enum CommissionStatus {
+  PENDING
+  PAID
+}
+
+enum NotificationChannel {
+  SMS
+  EMAIL
+  PUSH
+}
+
+/// A user account. The same table serves customers, agents and admins —
+/// `role` decides which portal they land on and what the middleware allows.
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  phone         String?
+  passwordHash  String
+  role          Role     @default(CUSTOMER)
+  suspended     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Agent-only: the shop this agent works from
+  shopId        String?
+  shop          Shop?    @relation(fields: [shopId], references: [id])
+
+  devices       Device[]        @relation("CustomerDevices")
+  registeredBy  Device[]        @relation("AgentRegisteredDevices")
+  payments      Payment[]
+  claims        Claim[]         @relation("CustomerClaims")
+  commissions   Commission[]
+  notifications Notification[]
+  callLogsReceived CallLog[] @relation("CustomerCallLogs")
+  callLogsMade     CallLog[] @relation("StaffCallLogs")
+  passwordResetTokens PasswordResetToken[]
+}
+
+/// A mobile shop / repair partner. Agents belong to a shop.
+model Shop {
+  id           String   @id @default(cuid())
+  name         String
+  location     String
+  verified     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  agents       User[]
+  devices      Device[]
+}
+
+/// A registered device. IMEI is the single source of truth used by the
+/// public IMEI checker.
+model Device {
+  id           String          @id @default(cuid())
+  imei         String          @unique
+  brand        String
+  model        String
+  modelCode    String?
+  value        Int             // device value in Rs., drives package pricing
+  packagePrice Int?            // warranty package price agreed with customer
+  salesmanName String?
+  firstPaymentAmount Int?      // amount paid for the package at registration time
+  condition    DeviceCondition @default(NEW)
+  imeiVerified Boolean         @default(false)
+  imageUrls    String[]        @default([])
+  videoUrls    String[]        @default([])
+  createdAt    DateTime        @default(now())
+
+  customerId   String
+  customer     User            @relation("CustomerDevices", fields: [customerId], references: [id], onDelete: Cascade)
+
+  registeredById String?
+  registeredBy   User?         @relation("AgentRegisteredDevices", fields: [registeredById], references: [id], onDelete: SetNull)
+
+  shopId       String?
+  shop         Shop?           @relation(fields: [shopId], references: [id])
+
+  warranty     Warranty?
+  claims       Claim[]
+  commissions  Commission[]
+}
+
+/// One active (or past) warranty package per device.
+model Warranty {
+  id             String         @id @default(cuid())
+  deviceId       String         @unique
+  device         Device         @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  tierLabel      String         // Essential Shield / Total Care / Elite Enterprise
+  price          Int            // annual premium in Rs., from calculatePackage()
+  status         WarrantyStatus @default(ACTIVE)
+  activatedAt    DateTime       @default(now())
+  expiresAt      DateTime
+
+  certificateUrl String?
+
+  payments       Payment[]
+}
+
+/// A partner repair center customers can be routed to for a claim.
+model RepairCenter {
+  id        String   @id @default(cuid())
+  name      String
+  location  String
+  phone     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+/// A claim filed against a device's warranty.
+model Claim {
+  id           String      @id @default(cuid())
+  deviceId     String
+  device       Device      @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  customerId   String
+  customer     User        @relation("CustomerClaims", fields: [customerId], references: [id], onDelete: Cascade)
+
+  issue        String
+  status       ClaimStatus @default(SUBMITTED)
+  riskScore    ClaimRisk?  // set by the AI fraud detection step
+  estimatedCost Int?
+  photoUrls    String[]    @default([])
+
+  submittedAt  DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+/// A single payment — either a full annual premium or one EMI installment.
+model Payment {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  warrantyId  String?
+  warranty    Warranty?     @relation(fields: [warrantyId], references: [id], onDelete: SetNull)
+
+  amount      Int           // Rs.
+  method      PaymentMethod @default(FULL)
+  status      PaymentStatus @default(PENDING)
+  installmentNo Int?        // for EMI: which installment this is
+  totalInstallments Int?
+  paidAt      DateTime?
+  createdAt   DateTime      @default(now())
+}
+
+/// Commission owed to an agent for a device they registered.
+model Commission {
+  id        String            @id @default(cuid())
+  agentId   String
+  agent     User              @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  deviceId  String?
+  device    Device?           @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  amount    Int
+  status    CommissionStatus  @default(PENDING)
+  createdAt DateTime          @default(now())
+}
+
+/// Outbound SMS / Email / push notifications, logged for the Notification Center.
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  channel   NotificationChannel
+  title     String
+  body      String
+  read      Boolean             @default(false)
+  createdAt DateTime            @default(now())
+}
+
+/// Messages submitted through the public Contact page.
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+/// A follow-up call logged by Call Center staff against a customer.
+model CallLog {
+  id           String   @id @default(cuid())
+  customerId   String
+  customer     User     @relation("CustomerCallLogs", fields: [customerId], references: [id], onDelete: Cascade)
+
+  calledById   String
+  calledBy     User     @relation("StaffCallLogs", fields: [calledById], references: [id], onDelete: Cascade)
+
+  outcome      CallOutcome
+  note         String?
+  createdAt    DateTime @default(now())
+}
+
+enum CallOutcome {
+  ANSWERED
+  NO_ANSWER
+  FOLLOW_UP_NEEDED
+  RENEWED
+  NOT_INTERESTED
+}
+
+/// A one-time token issued when a user requests a password reset.
+/// We store a hash of the token, never the raw value — the raw token
+/// only ever exists in the emailed link.
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+}

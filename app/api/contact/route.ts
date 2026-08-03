@@ -1,0 +1,68 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { sendEmail } from "@/lib/mailer";
+import { prisma } from "@/lib/prisma";
+
+const contactSchema = z.object({
+  name: z.string().min(2, "Please enter your name"),
+  email: z.string().email("Enter a valid email"),
+  subject: z.string().min(2, "Please enter a subject"),
+  message: z.string().min(5, "Message is too short"),
+});
+
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => null);
+  const parsed = contactSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { status: 400 }
+    );
+  }
+
+  const { name, email, subject, message } = parsed.data;
+
+  try {
+    await prisma.contactMessage.create({ data: parsed.data });
+  } catch (err) {
+    console.error("Contact form: database write failed:", err);
+    return NextResponse.json(
+      { error: "Couldn't send your message right now. Please try again shortly." },
+      { status: 500 }
+    );
+  }
+
+  // Alert the admin inbox that a new message came in. ADMIN_NOTIFICATION_EMAIL
+  // lets you point this at a specific inbox; otherwise it falls back to the
+  // same address SMTP sends from (SMTP_FROM / SMTP_USER).
+  const adminEmail =
+    process.env.ADMIN_NOTIFICATION_EMAIL ||
+    process.env.SMTP_FROM ||
+    process.env.SMTP_USER;
+
+  if (adminEmail) {
+    // Awaited (not fire-and-forget) — some hosting environments tear down
+    // the request right after the response is sent, which can cut off an
+    // un-awaited email before it finishes. sendEmail catches its own
+    // errors, so this can't fail the contact form submission.
+    // "from" stays the business's own address (required by SMTP providers —
+    // sending "from" an address you don't control gets blocked/spam-filtered).
+    // "replyTo" is the customer's email, so hitting Reply in the inbox goes
+    // straight back to them.
+    await sendEmail(
+      adminEmail,
+      `New contact message: ${subject}`,
+      `
+        <p>New message from the Contact page:</p>
+        <p><strong>Name:</strong> ${name}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Subject:</strong> ${subject}</p>
+        <p><strong>Message:</strong><br />${message.replace(/\n/g, "<br />")}</p>
+      `,
+      email
+    );
+  }
+
+  return NextResponse.json({ ok: true }, { status: 201 });
+}

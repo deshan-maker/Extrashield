@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #F7F9FC;
+  --bg-elevated: #FFFFFF;
+  --text-primary: #0A1628;
+  --text-secondary: #4A5A70;
+  --border-soft: rgba(10, 22, 40, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.4);
+}
+
+.dark {
+  --bg: #050B16;
+  --bg-elevated: #0A1628;
+  --text-primary: #F4F6F9;
+  --text-secondary: #9FACBD;
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(18, 34, 56, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
+
+* {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  transition: background-color 0.35s ease, color 0.35s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.border-soft {
+  border-color: var(--border-soft);
+}
+
+.bg-elevated {
+  background-color: var(--bg-elevated);
+}
+
+.grid-fade {
+  background-image:
+    radial-gradient(ellipse 65% 55% at 25% -10%, rgba(79, 220, 232, 0.20), transparent 62%),
+    radial-gradient(ellipse 55% 45% at 78% 0%, rgba(39, 68, 105, 0.14), transparent 60%),
+    radial-gradient(ellipse 50% 35% at 50% 105%, rgba(79, 220, 232, 0.08), transparent 70%);
+  background-repeat: no-repeat;
+  background-size: 160% 160%;
+  animation: aurora-drift 22s ease-in-out infinite alternate;
+}
+
+.dark .grid-fade {
+  background-image:
+    radial-gradient(ellipse 65% 55% at 25% -10%, rgba(79, 220, 232, 0.16), transparent 62%),
+    radial-gradient(ellipse 55% 45% at 78% 0%, rgba(140, 234, 242, 0.10), transparent 60%),
+    radial-gradient(ellipse 50% 35% at 50% 105%, rgba(79, 220, 232, 0.07), transparent 70%);
+}
+
+@keyframes aurora-drift {
+  0% {
+    background-position: 0% 0%, 100% 0%, 50% 100%;
+  }
+  100% {
+    background-position: 12% 8%, 88% 12%, 55% 92%;
+  }
+}
+
+.text-gradient {
+  background: linear-gradient(120deg, #0A1628 0%, #274469 45%, #20C7D6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dark .text-gradient {
+  background: linear-gradient(120deg, #F4F6F9 0%, #8CEAF2 60%, #4FDCE8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-soft);
+  border-radius: 999px;
+}
+
+:focus-visible {
+  outline: 2px solid #20C7D6;
+  outline-offset: 2px;
+}
