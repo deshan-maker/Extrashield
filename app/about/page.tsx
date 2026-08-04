@@ -29,7 +29,7 @@ const values = [
 ];
 
 const timeline = [
-  { year: "2024", title: "The idea", desc: "Started as a simple IMEI registry for a single shop in Kandy." },
+  { year: "2024", title: "The idea", desc: "Started as a simple IMEI registry for a single shop in Rathnapura." },
   { year: "2025", title: "Warranty Advisor", desc: "Launched usage-based pricing driven entirely by device value." },
   { year: "2026", title: "Cloud platform", desc: "Rebuilt as a full cloud platform connecting customers, agents and admins." },
 ];
@@ -126,7 +126,7 @@ export default function AboutPage() {
               className="glass absolute -bottom-6 -left-6 hidden rounded-2xl px-4 py-3 shadow-soft sm:block"
             >
               <p className="text-[11px] font-medium text-secondary">Founded</p>
-              <p className="font-display text-lg font-bold">2024, Kandy</p>
+              <p className="font-display text-lg font-bold">2024, Rathnapura</p>
             </motion.div>
           </motion.div>
         </div>
