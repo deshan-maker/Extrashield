@@ -18,7 +18,7 @@ const infoCards = [
   {
     icon: Phone,
     title: "Call us",
-    lines: ["+94 11 234 5678", "Mon–Sat, 8:30am–6pm"],
+    lines: ["+94 78 428 2224", "Mon–Sat, 8:30am–6pm"],
   },
   {
     icon: Mail,
@@ -28,7 +28,7 @@ const infoCards = [
   {
     icon: MapPin,
     title: "Visit us",
-    lines: ["No. 42, Temple Road", "Kandy, Sri Lanka"],
+    lines: ["No. 42, Temple Road", "Kiribathgoda, Sri Lanka"],
   },
   {
     icon: Clock,

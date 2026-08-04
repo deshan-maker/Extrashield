@@ -153,6 +153,7 @@ export default function AdminDashboard() {
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
+  const [messageError, setMessageError] = useState<string | null>(null);
   const [devices, setDevices] = useState<
     {
       id: string;
@@ -168,10 +169,11 @@ export default function AdminDashboard() {
       salesmanName: string | null;
       packagePrice: number | null;
       firstPaymentAmount: number | null;
-      warranty: { tierLabel: string; status: string } | null;
+      warranty: { tierLabel: string; status: string; price: number } | null;
     }[]
   >([]);
   const [devicesLoading, setDevicesLoading] = useState(true);
+  const [devicesError, setDevicesError] = useState<string | null>(null);
   const [deviceQuery, setDeviceQuery] = useState("");
   const [confirmVerifyId, setConfirmVerifyId] = useState<string | null>(null);
 
@@ -294,9 +296,20 @@ export default function AdminDashboard() {
 
   async function loadDevices(q?: string) {
     setDevicesLoading(true);
-    const res = await fetch(`/api/admin/devices${q ? `?q=${encodeURIComponent(q)}` : ""}`);
-    if (res.ok) setDevices((await res.json()).devices);
-    setDevicesLoading(false);
+    setDevicesError(null);
+    try {
+      const res = await fetch(`/api/admin/devices${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setDevicesError(`Couldn't load devices (${res.status}): ${body?.error ?? "Unknown error"}`);
+        return;
+      }
+      setDevices((await res.json()).devices);
+    } catch {
+      setDevicesError("Network error — couldn't reach the server.");
+    } finally {
+      setDevicesLoading(false);
+    }
   }
 
   function exportDevicesToExcel() {
@@ -320,7 +333,7 @@ export default function AdminDashboard() {
     const asText = (value: string) => `"=""${value.replace(/"/g, '""')}"""`;
 
     const rows = devices.map((d) => {
-      const packagePrice = d.packagePrice ?? 0;
+      const packagePrice = d.warranty?.price ?? d.packagePrice ?? 0;
       const firstPayment = d.firstPaymentAmount ?? 0;
       const balance = Math.max(0, packagePrice - firstPayment);
       return [
@@ -330,9 +343,9 @@ export default function AdminDashboard() {
         d.customer.phone ? asText(d.customer.phone) : escapeCell(""),
         escapeCell(d.shopName ?? ""),
         escapeCell(d.salesmanName ?? ""),
-        escapeCell(d.packagePrice != null ? packagePrice : ""),
-        escapeCell(d.packagePrice != null ? firstPayment : ""),
-        escapeCell(d.packagePrice != null ? balance : ""),
+        escapeCell(d.warranty ? packagePrice : ""),
+        escapeCell(d.warranty ? firstPayment : ""),
+        escapeCell(d.warranty ? balance : ""),
         escapeCell(d.warranty ? `${d.warranty.tierLabel} (${d.warranty.status})` : "None"),
         escapeCell(d.imeiVerified ? "Verified" : "Unverified"),
       ].join(",");
@@ -390,9 +403,24 @@ export default function AdminDashboard() {
 
   async function deleteMessage(id: string) {
     setDeletingMessageId(id);
-    await fetch(`/api/admin/contact/${id}`, { method: "DELETE" });
-    setDeletingMessageId(null);
-    loadDashboard();
+    setMessageError(null);
+    try {
+      const res = await fetch(`/api/admin/contact/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        console.error("Delete contact message failed:", res.status, body);
+        setMessageError(
+          `Couldn't delete (${res.status}): ${body?.error ?? "Unknown error"}`
+        );
+        return;
+      }
+      await loadDashboard();
+    } catch (err) {
+      console.error("Delete contact message network error:", err);
+      setMessageError("Network error — couldn't reach the server.");
+    } finally {
+      setDeletingMessageId(null);
+    }
   }
 
   async function toggleSuspend(userId: string, suspended: boolean) {
@@ -490,8 +518,8 @@ export default function AdminDashboard() {
             <AreaChart data={data?.revenueByMonth ?? []}>
               <defs>
                 <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#4FDCE8" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#4FDCE8" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#70A2EB" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#70A2EB" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-soft)" vertical={false} />
@@ -505,7 +533,7 @@ export default function AdminDashboard() {
                   fontSize: 12,
                 }}
               />
-              <Area type="monotone" dataKey="revenue" stroke="#20C7D6" strokeWidth={2} fill="url(#revFill)" />
+              <Area type="monotone" dataKey="revenue" stroke="#0951BC" strokeWidth={2} fill="url(#revFill)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -704,6 +732,11 @@ export default function AdminDashboard() {
           </button>
         </div>
 
+        {devicesError && (
+          <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-[12px] text-red-500">
+            {devicesError}
+          </p>
+        )}
         {devicesLoading ? (
           <p className="text-[12.5px] text-secondary">Loading devices...</p>
         ) : !devices.length ? (
@@ -749,12 +782,17 @@ export default function AdminDashboard() {
                       )}
                     </td>
                     <td className="py-3">
-                      {d.packagePrice != null ? (
+                      {d.warranty ? (
                         <>
-                          <p className="font-mono text-secondary">Rs. {d.packagePrice.toLocaleString()}</p>
+                          <p className="font-mono text-secondary">
+                            Rs. {(d.warranty.price ?? d.packagePrice ?? 0).toLocaleString()}
+                          </p>
                           <p className="text-[11px] text-secondary/70">
                             Paid Rs. {(d.firstPaymentAmount ?? 0).toLocaleString()} · Bal Rs.{" "}
-                            {Math.max(0, d.packagePrice - (d.firstPaymentAmount ?? 0)).toLocaleString()}
+                            {Math.max(
+                              0,
+                              (d.warranty.price ?? d.packagePrice ?? 0) - (d.firstPaymentAmount ?? 0)
+                            ).toLocaleString()}
                           </p>
                         </>
                       ) : (
@@ -819,16 +857,16 @@ export default function AdminDashboard() {
       >
         {devicesLoading ? (
           <p className="text-[12.5px] text-secondary">Loading...</p>
-        ) : !devices.filter((d) => d.packagePrice != null).length ? (
+        ) : !devices.filter((d) => d.warranty).length ? (
           <p className="text-[12.5px] text-secondary">No packages recorded yet.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {(expandedPackages
-              ? devices.filter((d) => d.packagePrice != null)
-              : devices.filter((d) => d.packagePrice != null).slice(0, PAGE_SIZE)
+              ? devices.filter((d) => d.warranty)
+              : devices.filter((d) => d.warranty).slice(0, PAGE_SIZE)
             )
               .map((d) => {
-                const packagePrice = d.packagePrice ?? 0;
+                const packagePrice = d.warranty?.price ?? d.packagePrice ?? 0;
                 const firstPayment = d.firstPaymentAmount ?? 0;
                 const balance = Math.max(0, packagePrice - firstPayment);
                 const daysLeft = daysLeftToPay(d.createdAt);
@@ -879,7 +917,7 @@ export default function AdminDashboard() {
           onToggle={() => setExpandedPackages((v) => !v)}
           remaining={Math.max(
             0,
-            devices.filter((d) => d.packagePrice != null).length - PAGE_SIZE
+            devices.filter((d) => d.warranty).length - PAGE_SIZE
           )}
         />
       </SectionCard>
@@ -1140,6 +1178,11 @@ export default function AdminDashboard() {
         title="Contact Messages"
         subtitle="Submissions from the public Contact page"
       >
+        {messageError && (
+          <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-[12px] text-red-500">
+            {messageError}
+          </p>
+        )}
         {!data?.contactMessages.length ? (
           <p className="text-[12.5px] text-secondary">No messages yet.</p>
         ) : (
