@@ -22,8 +22,14 @@ const registerDeviceSchema = z.object({
   salesmanName: z.string().optional(),
   firstPaymentAmount: z.number().int().nonnegative().optional(),
   condition: z.enum(["NEW", "USED"]),
-  imageUrls: z.array(z.string()).max(4, "Maximum 4 photos").optional(),
-  videoUrls: z.array(z.string()).max(3, "Maximum 3 videos").optional(),
+  imageUrls: z
+    .array(z.string().max(8_000_000, "Each photo must be under ~6MB"))
+    .max(4, "Maximum 4 photos")
+    .optional(),
+  videoUrls: z
+    .array(z.string().max(40_000_000, "Each video must be under ~30MB"))
+    .max(3, "Maximum 3 videos")
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -134,7 +140,10 @@ export async function POST(request: Request) {
     include: { warranty: true, customer: true },
   });
 
-  const commissionAmount = calculateCommission(packagePrice ?? pkg.price);
+  // Commission is always based on the server-calculated tier price
+  // (pkg.price), never the client-submitted packagePrice — otherwise an
+  // agent could inflate their own commission by sending a fake value here.
+  const commissionAmount = calculateCommission(pkg.price);
 
   await prisma.commission.create({
     data: {

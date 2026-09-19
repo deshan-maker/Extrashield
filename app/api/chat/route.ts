@@ -2,11 +2,26 @@ import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session || session.user.role !== "CUSTOMER") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Max 20 messages per customer per 10 minutes — enough for a real
+  // support conversation, not enough to run up the LLM bill.
+  const limit = checkRateLimit(`chat:${session.user.id}`, 20, 10 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      {
+        error: `You're sending messages too quickly. Please try again in ${Math.ceil(
+          limit.retryAfterSeconds / 60
+        )} minute(s).`,
+      },
+      { status: 429 }
+    );
   }
 
   const apiKey = process.env.GROQ_API_KEY;
@@ -26,6 +41,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Message is required" }, { status: 400 });
   }
 
+  if (userMessage.length > 2000) {
+    return NextResponse.json(
+      { error: "Message is too long (max 2000 characters)." },
+      { status: 400 }
+    );
+  }
+
   // --- Pull the customer's real data so the assistant answers from facts, not guesses ---
   let devices;
   try {
@@ -39,7 +61,7 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("Chat: database query failed:", err);
     return NextResponse.json(
-      { error: "Couldn't load your account data (database connection issue). Check the server terminal for details." },
+      { error: "Couldn't load your account data right now. Please try again shortly." },
       { status: 500 }
     );
   }

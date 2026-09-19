@@ -17,7 +17,6 @@ export async function sendEmail(
   html: string,
   replyTo?: string
 ) {
-  console.log(`>>> EMAIL-DEBUG: sendEmail() called — to=${to} subject="${subject}"`);
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
 
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
@@ -29,7 +28,8 @@ export async function sendEmail(
   // Loaded dynamically so the app still builds if nodemailer isn't installed.
   // @ts-ignore — nodemailer is an optional dependency; install it to enable real email sending.
   const nodemailer = await import("nodemailer").catch((err) => {
-    console.log(">>> EMAIL-DEBUG: dynamic import of nodemailer threw:", err);
+    // eslint-disable-next-line no-console
+    console.error("[email] Failed to load nodemailer:", err);
     return null;
   });
   if (!nodemailer) {
@@ -39,7 +39,6 @@ export async function sendEmail(
   }
 
   try {
-    console.log(">>> EMAIL-DEBUG: creating transport and calling sendMail...");
     const transport = nodemailer.default.createTransport({
       host: SMTP_HOST,
       port: Number(SMTP_PORT ?? 587),
@@ -47,14 +46,13 @@ export async function sendEmail(
       auth: { user: SMTP_USER, pass: SMTP_PASS },
     });
 
-    const info = await transport.sendMail({
+    await transport.sendMail({
       from: SMTP_FROM || SMTP_USER,
       to,
       subject,
       html,
       ...(replyTo ? { replyTo } : {}),
     });
-    console.log(">>> EMAIL-DEBUG: sendMail resolved successfully:", info?.messageId);
   } catch (err) {
     // Email failures should never break the request that triggered them
     // (e.g. a device registration shouldn't fail just because the email bounced).

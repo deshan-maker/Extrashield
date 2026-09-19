@@ -23,14 +23,6 @@ export async function POST(request: Request) {
   const token: string | undefined = body?.token;
   const password: string | undefined = body?.password;
 
-  console.log("[reset-password] Received body:", {
-    hasToken: Boolean(token),
-    tokenLength: token?.length ?? 0,
-    hasPassword: Boolean(password),
-    passwordLength: password?.length ?? 0,
-    rawBody: body,
-  });
-
   if (!token || !password) {
     return NextResponse.json({ error: "Token and password are required" }, { status: 400 });
   }
