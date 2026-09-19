@@ -7,7 +7,10 @@ import { uploadImagesToCloudinary } from "@/lib/cloudinary";
 const submitClaimSchema = z.object({
   deviceId: z.string().min(1),
   issue: z.string().min(3, "Describe the issue in a few words"),
-  photoUrls: z.array(z.string()).max(4).optional(),
+  photoUrls: z
+    .array(z.string().max(8_000_000, "Each photo must be under ~6MB"))
+    .max(4)
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -27,9 +30,22 @@ export async function POST(request: Request) {
 
   const device = await prisma.device.findUnique({
     where: { id: parsed.data.deviceId },
+    include: { warranty: true },
   });
   if (!device || device.customerId !== session.user.id) {
     return NextResponse.json({ error: "Device not found" }, { status: 404 });
+  }
+
+  if (
+    !device.warranty ||
+    device.warranty.status === "EXPIRED" ||
+    device.warranty.status === "CANCELLED" ||
+    device.warranty.expiresAt < new Date()
+  ) {
+    return NextResponse.json(
+      { error: "This device doesn't have an active warranty to file a claim against." },
+      { status: 400 }
+    );
   }
 
   const photoUrls = parsed.data.photoUrls?.length
